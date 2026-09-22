@@ -1,0 +1,18 @@
+# Pipeline reproducible (DVC): `dvc repro` vuelve a correr el experimento solo
+# si cambió el código del banco de pruebas. No hace falta DVC para usar el
+# proyecto: `python run_experiment.py --preset completo` hace lo mismo.
+stages:
+  experimento:
+    cmd: python run_experiment.py --preset completo --out results
+    deps:
+      - run_experiment.py
+      - src/trust_mas
+    outs:
+      - results/factorial.csv
+      - results/curva.csv
+      - results/costo.csv
+      - results/tablas
+      - results/resumen.md:
+          cache: false
+      - results/panel.html:
+          cache: false

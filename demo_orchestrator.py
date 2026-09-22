@@ -1,57 +1,52 @@
-"""Demo con orquestador REAL (LangGraph + Gemini): a diferencia de `demo.py`
-(texto fijo, agentes simulados), aqui cada agente es un modelo Gemini de
-verdad generando texto no determinista. El grafo es: orchestrator -> analyst
--> compromised -> synthesizer. Cada arista pasa por `MessageBus.route()`
-(Capas A -> B -> C) antes de que el contenido llegue al siguiente nodo.
+"""Demo con orquestador REAL (LangGraph + un LLM de verdad): a diferencia de
+`demo.py` (texto fijo, agentes simulados), aqui cada agente es un modelo real
+(Gemini u Ollama local) generando texto no determinista. Por defecto el grafo
+es lineal: orchestrator -> analyst -> compromised -> synthesizer. Cada arista
+pasa por `MessageBus.route()` (Capas A -> B -> C) antes de que el contenido
+llegue al contexto compartido. El nodo `compromised` intenta el ataque A3
+(suplantacion de rol) con texto generado por el propio modelo.
 
-Requiere una GOOGLE_API_KEY gratuita (https://aistudio.google.com/apikey).
-Configurala como variable de entorno ANTES de correr este script -- nunca la
-pegues en un archivo versionado:
+Proveedor (variables de entorno, nunca claves en el codigo):
 
-    PowerShell:  $env:GOOGLE_API_KEY = "tu-clave"
+    PowerShell:  $env:GOOGLE_API_KEY = "tu-clave"        (Gemini, por defecto)
+                 $env:TRUSTMAS_LLM = "ollama"            (Ollama local, opcional)
     bash:        export GOOGLE_API_KEY="tu-clave"
 
-Ejecutar con: python demo_orchestrator.py
+Ejecutar con:
+    python demo_orchestrator.py
+    python demo_orchestrator.py --topologia estrella     (lineal|estrella|jerarquica|malla)
 """
 
 from __future__ import annotations
 
-import os
+import argparse
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")  # acentos legibles tambien al redirigir en Windows
 
 from trust_mas.agent import SimulatedAgent
 from trust_mas.audit import AuditLog
 from trust_mas.bus import MessageBus
 from trust_mas.identity import IdentityRegistry, KeyPair, issue_capability_token
 from trust_mas.models import AgentRole, ProvenanceSource
-from trust_mas.orchestrator import AgentNode, build_linear_graph, initial_state
+from trust_mas.llm import LLMConfigError, build_chat_model
+from trust_mas.orchestrator import TOPOLOGIES, AgentNode, build_graph, initial_state
 from trust_mas.trust import TrustEngine
 
 SEPARATOR = "-" * 78
 
 
-def require_api_key() -> str:
-    key = os.environ.get("GOOGLE_API_KEY")
-    if not key:
-        raise SystemExit(
-            "Falta GOOGLE_API_KEY. Consigue una clave gratuita en "
-            "https://aistudio.google.com/apikey y expórtala como variable de "
-            "entorno antes de correr este script (nunca la pegues en el código)."
-        )
-    return key
-
-
-def build_llm(model_name: str = "gemini-2.0-flash"):
-    from langchain_google_genai import ChatGoogleGenerativeAI
-
-    return ChatGoogleGenerativeAI(model=model_name, temperature=0.7)
-
-
 def main() -> None:
-    require_api_key()
+    parser = argparse.ArgumentParser(description="TRUST-MAS sobre LangGraph con un LLM real")
+    parser.add_argument("--topologia", choices=TOPOLOGIES, default="lineal")
+    args = parser.parse_args()
+    try:
+        llm = build_chat_model()
+    except LLMConfigError as exc:
+        raise SystemExit(str(exc)) from None
 
     registry = IdentityRegistry()
     audit_log = AuditLog()
@@ -81,8 +76,6 @@ def main() -> None:
     )
     bus.register_capability_token("analyst", token_analyst)
     bus.register_capability_token("compromised", token_compromised)
-
-    llm = build_llm()
 
     nodes = [
         AgentNode(
@@ -143,10 +136,10 @@ def main() -> None:
         ),
     ]
 
-    graph = build_linear_graph(nodes)
+    graph = build_graph(args.topologia, nodes)
 
     print("=" * 78)
-    print("TRUST-MAS -- orquestador real (LangGraph + Gemini)")
+    print(f"TRUST-MAS -- orquestador real (LangGraph + LLM) | topologia: {args.topologia}")
     print("=" * 78)
 
     final_state = graph.invoke(initial_state())

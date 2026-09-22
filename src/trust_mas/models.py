@@ -50,9 +50,12 @@ class CapabilityToken:
     max_delegation_depth: int
     expiry: float
     signature: bytes = b""
+    # Token del que se atenuó este (None si lo emitió directamente una autoridad
+    # raíz). Permite verificar la cadena de delegación completa hasta la raíz.
+    parent: Optional["CapabilityToken"] = None
 
     def is_expired(self, now: Optional[float] = None) -> bool:
-        return (now or time.time()) > self.expiry
+        return (time.time() if now is None else now) > self.expiry
 
     def allows(self, action: str) -> bool:
         return action in self.actions
@@ -76,9 +79,22 @@ class Message:
     def signing_payload(self) -> bytes:
         """Serialización canónica de los campos cubiertos por la firma.
 
-        Deliberadamente NO incluye `provenance` (la añade el bus, no el emisor)
-        ni `signature` (es el resultado de firmar esto).
+        Incluye la etiqueta de procedencia declarada por el emisor para que no
+        pueda alterarse en tránsito; aun así el bus nunca confía en ella tal
+        cual (ver `MessageBus._effective_provenance`). NO incluye `signature`
+        (es el resultado de firmar esto).
         """
+        if self.provenance is None:
+            provenance_part = ""
+        else:
+            provenance_part = "|".join(
+                [
+                    self.provenance.source.value,
+                    self.provenance.origin_id,
+                    "1" if self.provenance.trusted else "0",
+                    ",".join(self.provenance.chain),
+                ]
+            )
         parts = [
             self.sender_id,
             self.recipient_id,
@@ -88,5 +104,6 @@ class Message:
             self.nonce,
             f"{self.timestamp:.6f}",
             self.action or "",
+            provenance_part,
         ]
         return "\x1f".join(parts).encode("utf-8")

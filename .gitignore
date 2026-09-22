@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Entornos virtuales y secretos (GOOGLE_API_KEY nunca va al repo)
+.venv/
+venv/
+env/
+.env
+.env.*
+
+# Tests y herramientas
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Artefactos generados por las demos y el banco de pruebas
+audit_log*.jsonl
+results/
+!results/.gitkeep
+
+# Editores / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

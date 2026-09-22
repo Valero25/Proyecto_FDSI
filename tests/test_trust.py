@@ -136,3 +136,23 @@ def test_decision_accept_con_score_alto():
     engine = TrustEngine()
     evaluation = engine.evaluate(make_message(body="todo en orden"), True, True)
     assert evaluation.decision == PolicyDecision.ACCEPT
+
+
+def test_adaptive_threshold_se_relaja_cuando_la_actividad_sospechosa_sale_de_la_ventana():
+    threshold = AdaptiveThreshold(base_threshold=0.5, sensitivity=0.05)
+    for _ in range(20):
+        threshold.observe(0.1)
+    assert threshold.current() == 0.9
+    for _ in range(20):
+        threshold.observe(0.95)  # la ventana ya solo contiene trafico sano
+    assert threshold.current() == 0.5
+
+
+def test_adaptive_threshold_refleja_proporcion_de_la_ventana():
+    threshold = AdaptiveThreshold(base_threshold=0.5, sensitivity=0.05)
+    for _ in range(10):
+        threshold.observe(0.1)
+    for _ in range(10):
+        threshold.observe(0.9)
+    # 10 bajos de 20: 0.5 + 0.05 * 0.5 * 10
+    assert abs(threshold.current() - 0.75) < 1e-9
